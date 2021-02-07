@@ -1,50 +1,65 @@
-#!/usr/bin/env python
-import RPi.GPIO as GPIO
-import time
+#!/usr/bin/env python     #告诉Linux本文件是一个Python程序
+import RPi.GPIO as GPIO   #导入控制GPIO的模块，RPi.GPIO
+import time     #导入时间模块，提供延时、时钟和其它时间函数
 
-colors = [0xFF00, 0x00FF, 0x0FF0, 0xF00F]
-pins = {'pin_R':11, 'pin_G':12}  # pins is a dict
+colors = [0xFF00, 0x00FF, 0x0FF0, 0xF00F]   #颜色列表
+pins = {'pin_R':11, 'pin_G':12}  #针脚字典，物理位置编号，红色针脚为11号，绿色针脚为12号
 
-GPIO.setmode(GPIO.BOARD)       # Numbers GPIOs by physical location
+GPIO.setmode(GPIO.BOARD)       #设置引脚编号模式为板载模式，即树莓派上的物理位置编号
+#或者为BCM模式：
+#GPIO.setmode(GPIO.BCM)
+
+
+#第5步：初始化LED灯，输入输出模式、初始电平、频率、占空比。脉宽调制（PWM），是指用微处理器的数字输出对模拟电路进行控制，是一种对模拟信号电平进行数字编码的方法。
 for i in pins:
-	GPIO.setup(pins[i], GPIO.OUT)   # Set pins' mode is output
-	GPIO.output(pins[i], GPIO.HIGH) # Set pins to high(+3.3V) to off led
+	GPIO.setup(pins[i], GPIO.OUT)   # 设置针脚模式为输出（或者输入GPIO.IN）
+	GPIO.output(pins[i], GPIO.LOW) #设置针脚为低电平，关掉LED灯
 
-p_R = GPIO.PWM(pins['pin_R'], 2000)  # set Frequece to 2KHz
+p_R = GPIO.PWM(pins['pin_R'], 2000)  # 设置频率为 2KHz
 p_G = GPIO.PWM(pins['pin_G'], 2000)
 
-p_R.start(0)      # Initial duty Cycle = 0(leds off)
-p_G.start(0)
+p_R.start(0)      # 初始占空比为０（范围：0.0 <= dc <= 100.0，0为关闭状态)
+p_G.start(0)      # p.start(dc) dc代表占空比
 
+
+#第６步：创建map()函数。由于RGB格式各颜色的刺激量取值范围为：最小0，最大255，而占空比的取值范围为：最小0，最大100，所以要将颜色的刺激量转换为占空比对应的值。
 def map(x, in_min, in_max, out_min, out_max):
 	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
-def setColor(col):   # For example : col = 0x112233
-	R_val = (col & 0x1100) >> 8
-	G_val = (col & 0x0011) >> 0
+# 第7步：创建setcolor()函数。通过更改占空比调整各基色的亮度，进而设置LED的发光颜色。
+def setColor(col):   # 设置颜色
+	R_val = (col & 0xFF00) >> 8    #先“与”运算只保留自己颜色所在位的值有效
+	G_val = (col & 0x00FF) >> 0    #再“右移”运算将自己颜色所在位的值提取出来
 	
-	R_val = map(R_val, 0, 255, 0, 100)
+	R_val = map(R_val, 0, 255, 0, 100)   #将颜色的刺激量转换为占空比对应的值
 	G_val = map(G_val, 0, 255, 0, 100)
 	
-	p_R.ChangeDutyCycle(R_val)     # Change duty cycle
+	p_R.ChangeDutyCycle(R_val)     # 更改占空比，调整该颜色的亮度
 	p_G.ChangeDutyCycle(G_val)
 
-def loop():
-	while True:
-		for col in colors:
-			setColor(col)
-			time.sleep(0.5)
 
+	
+#第8步：创建loop()循环函数。
+def loop():
+	while True:        #循环函数
+		for col in colors:         #遍历颜色列表
+			setColor(col)      #设置颜色
+			time.sleep(0.5)   #延时0.5秒
+
+			
+# 第9步：创建destroy()函数，清除LED状态。
 def destroy():
-	p_R.stop()
+	p_R.stop()        #停止PWM
 	p_G.stop()
 	for i in pins:
-		GPIO.output(pins[i], GPIO.HIGH)    # Turn off all leds
-	GPIO.cleanup()
+		GPIO.output(pins[i], GPIO.LOW)    # 关掉所有led灯
+	GPIO.cleanup()     #重置GPIO状态
 
+	
+	
+	
 if __name__ == "__main__":
-	try:
+	try:         #用try-except代码块来处理可能引发的异常
 		loop()
-	except KeyboardInterrupt:
+	except KeyboardInterrupt:     #如果遇用户中断（control+C），则执行destroy()函数
 		destroy()
-
